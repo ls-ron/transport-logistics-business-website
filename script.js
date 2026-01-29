@@ -16,67 +16,140 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
 const quoteForm = document.getElementById('quoteForm');
 
 if (quoteForm) {
-    quoteForm.addEventListener('submit', function(e) {
+    quoteForm.addEventListener('submit', async function(e) {
         e.preventDefault();
+
+        const submitButton = quoteForm.querySelector('button[type="submit"]');
+        if (!submitButton) return;
+
+        // Prevent double submissions
+        if (submitButton.disabled) {
+            return;
+        }
+
+        const originalText = submitButton.textContent;
         
         // Get form data
         const formData = {
-            name: document.getElementById('name').value,
-            phone: document.getElementById('phone').value,
-            email: document.getElementById('email').value,
-            company: document.getElementById('company').value,
-            pickup: document.getElementById('pickup').value,
-            delivery: document.getElementById('delivery').value,
+            name: document.getElementById('name').value.trim(),
+            phone: document.getElementById('phone').value.trim(),
+            email: document.getElementById('email').value.trim(),
+            company: document.getElementById('company').value.trim(),
+            pickup: document.getElementById('pickup').value.trim(),
+            delivery: document.getElementById('delivery').value.trim(),
             freightType: Array.from(document.querySelectorAll('input[name="freight-type"]:checked'))
                 .map(checkbox => checkbox.value)
         };
         
         // Basic validation
+        const errors = [];
+
         if (!formData.name || !formData.phone || !formData.email || !formData.pickup || !formData.delivery) {
-            alert('Please fill in all required fields.');
-            return;
+            errors.push('Please fill in all required fields.');
         }
-        
+
+        // Require at least one freight type
         if (formData.freightType.length === 0) {
-            alert('Please select at least one freight type.');
+            errors.push('Please select at least one freight type.');
+        }
+
+        // Loosely validate NZ phone number: starts with 0 and 8–11 digits total (ignoring spaces)
+        const phoneDigits = formData.phone.replace(/\s+/g, '');
+        if (phoneDigits && !/^0\d{7,10}$/.test(phoneDigits)) {
+            errors.push('Please enter a valid NZ phone number.');
+        }
+
+        // Basic email format validation
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (formData.email && !emailPattern.test(formData.email)) {
+            errors.push('Please enter a valid email address.');
+        }
+
+        if (errors.length > 0) {
+            showMessage(errors[0], 'error');
             return;
         }
         
-        // Here you would typically send the data to a server
-        // For now, we'll just show a success message
-        console.log('Form submitted:', formData);
-        
-        // Show success message
-        const submitButton = quoteForm.querySelector('button[type="submit"]');
-        const originalText = submitButton.textContent;
-        submitButton.textContent = 'Quote Requested! ✓';
-        submitButton.style.background = 'var(--success-color)';
+        // Disable form during submission
         submitButton.disabled = true;
+        submitButton.textContent = 'Submitting...';
         
-        // Reset form after 3 seconds
-        setTimeout(() => {
-            quoteForm.reset();
+        try {
+            const response = await fetch('/api/quote', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && response.status === 200) {
+                // Success - show success message
+                showMessage('Quote request submitted successfully! We\'ll get back to you soon.', 'success');
+                submitButton.textContent = 'Quote Requested! ✓';
+                submitButton.style.background = 'var(--success-color)';
+                
+                // Reset form after 3 seconds
+                setTimeout(() => {
+                    quoteForm.reset();
+                    submitButton.textContent = originalText;
+                    submitButton.style.background = '';
+                    submitButton.disabled = false;
+                    clearMessage();
+                }, 3000);
+            } else {
+                // Server returned an error
+                const errorMessage = data.error || data.message || 'An error occurred while submitting your request. Please try again.';
+                showMessage(errorMessage, 'error');
+                submitButton.textContent = originalText;
+                submitButton.disabled = false;
+            }
+        } catch (error) {
+            // Network error or other exception
+            console.error('Form submission error:', error);
+            showMessage('Unable to submit your request. Please check your internet connection and try again.', 'error');
             submitButton.textContent = originalText;
-            submitButton.style.background = '';
             submitButton.disabled = false;
-        }, 3000);
-        
-        // In a real application, you would send this data to your backend:
-        // fetch('/api/quote', {
-        //     method: 'POST',
-        //     headers: {
-        //         'Content-Type': 'application/json',
-        //     },
-        //     body: JSON.stringify(formData)
-        // })
-        // .then(response => response.json())
-        // .then(data => {
-        //     console.log('Success:', data);
-        // })
-        // .catch((error) => {
-        //     console.error('Error:', error);
-        // });
+        }
     });
+}
+
+// Helper function to show messages
+function showMessage(message, type) {
+    // Remove any existing message
+    clearMessage();
+    
+    // Create message element
+    const messageDiv = document.createElement('div');
+    messageDiv.id = 'form-message';
+    messageDiv.className = `form-message form-message-${type}`;
+    messageDiv.textContent = message;
+    messageDiv.style.cssText = `
+        padding: 1rem;
+        margin: 1rem 0;
+        border-radius: 5px;
+        font-weight: 500;
+        ${type === 'success' 
+            ? 'background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;' 
+            : 'background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;'
+        }
+    `;
+    
+    // Insert message before submit button
+    const submitButton = quoteForm.querySelector('button[type="submit"]');
+    if (submitButton && submitButton.parentNode) {
+        submitButton.parentNode.insertBefore(messageDiv, submitButton);
+    }
+}
+
+// Helper function to clear messages
+function clearMessage() {
+    const existingMessage = document.getElementById('form-message');
+    if (existingMessage) {
+        existingMessage.remove();
+    }
 }
 
 // Add animation on scroll

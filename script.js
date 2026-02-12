@@ -30,16 +30,21 @@ if (quoteForm) {
         const originalText = submitButton.textContent;
         
         // Get form data
+        const companyValue = document.getElementById('company').value.trim();
         const formData = {
             name: document.getElementById('name').value.trim(),
             phone: document.getElementById('phone').value.trim(),
             email: document.getElementById('email').value.trim(),
-            company: document.getElementById('company').value.trim(),
             pickup: document.getElementById('pickup').value.trim(),
             delivery: document.getElementById('delivery').value.trim(),
             freightType: Array.from(document.querySelectorAll('input[name="freight-type"]:checked'))
                 .map(checkbox => checkbox.value)
         };
+        
+        // Only include company if it has a value (JSON.stringify omits undefined, but we want to omit empty strings too)
+        if (companyValue) {
+            formData.company = companyValue;
+        }
         
         // Basic validation
         const errors = [];
@@ -74,17 +79,59 @@ if (quoteForm) {
         submitButton.disabled = true;
         submitButton.textContent = 'Submitting...';
         
+        const jsonBody = JSON.stringify(formData);
+        console.log('[QUOTE_FORM] Sending', { url: '/api/quote', keys: Object.keys(formData) });
+        
         try {
             const response = await fetch('/api/quote', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(formData)
+                body: jsonBody
             });
             
-            const data = await response.json();
+            // Check if response has JSON content before parsing
+            const contentType = response.headers.get('Content-Type');
+            const isJson = contentType && contentType.includes('application/json');
             
+            let data;
+            if (isJson) {
+                try {
+                    data = await response.json();
+                } catch (jsonError) {
+                    // If JSON parsing fails, use fallback error message
+                    console.error('JSON parse error:', jsonError);
+                    showMessage('An error occurred while processing your request. Please try again.', 'error');
+                    submitButton.textContent = originalText;
+                    submitButton.disabled = false;
+                    return;
+                }
+            } else {
+                // Non-JSON response (shouldn't happen with our Worker, but handle gracefully)
+                showMessage('An unexpected error occurred. Please try again.', 'error');
+                submitButton.textContent = originalText;
+                submitButton.disabled = false;
+                return;
+            }
+            
+            if (!response.ok) {
+                const detailStr = typeof data?.details === 'string'
+                    ? data.details
+                    : data?.details?.message ?? (data?.details && JSON.stringify(data.details));
+                console.error('[QUOTE_FORM] Server error', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    error: data?.error,
+                    details: data?.details,
+                    full: data
+                });
+                if (detailStr) console.error('[QUOTE_FORM] Server details:', detailStr);
+                if (data?.errors && Array.isArray(data.errors)) {
+                    console.error('[QUOTE_FORM] Validation errors:', data.errors);
+                }
+            }
+
             if (response.ok && response.status === 200) {
                 // Success - show success message
                 showMessage('Quote request submitted successfully! We\'ll get back to you soon.', 'success');
@@ -100,14 +147,24 @@ if (quoteForm) {
                     clearMessage();
                 }, 3000);
             } else {
-                // Server returned an error
-                const errorMessage = data.error || data.message || 'An error occurred while submitting your request. Please try again.';
+                let errorMessage = 'An error occurred while submitting your request. Please try again.';
+                if (data?.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+                    errorMessage = data.errors.join(' ');
+                } else if (data?.error) {
+                    errorMessage = data.error;
+                    const detailStr = typeof data?.details === 'string'
+                        ? data.details
+                        : data?.details?.message;
+                    if (detailStr) errorMessage += ' — ' + detailStr;
+                } else if (data?.message) {
+                    errorMessage = data.message;
+                }
                 showMessage(errorMessage, 'error');
                 submitButton.textContent = originalText;
                 submitButton.disabled = false;
             }
         } catch (error) {
-            // Network error or other exception
+            // Network error or other exception (fetch failed, timeout, etc.)
             console.error('Form submission error:', error);
             showMessage('Unable to submit your request. Please check your internet connection and try again.', 'error');
             submitButton.textContent = originalText;

@@ -1,0 +1,13 @@
+# Local env (secrets) – never commit
+.dev.vars
+
+# Wrangler / Cloudflare
+.wrangler/
+
+# Dependencies
+node_modules/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log

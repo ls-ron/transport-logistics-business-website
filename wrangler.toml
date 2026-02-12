@@ -1,0 +1,7 @@
+name = "transport-logistics-business-website"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "quotes-db"
+database_id = "8f864549-d98a-4659-ab21-605a815e7363"

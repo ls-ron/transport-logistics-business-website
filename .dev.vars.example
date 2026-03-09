@@ -1,0 +1,10 @@
+# Copy this file to .dev.vars and fill in your values.
+# .dev.vars is loaded by `wrangler pages dev` and is git-ignored.
+
+# Email notification (Resend) -- required for email to work
+EMAIL_FROM=onboarding@resend.dev
+EMAIL_TO=you@example.com
+RESEND_API_KEY=re_xxxxxxxxxxxx
+
+# Webhook (optional) -- set this to forward each quote to Zapier/Make/Google Sheets
+# QUOTE_WEBHOOK_URL=https://hooks.zapier.com/...

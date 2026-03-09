@@ -1,6 +1,8 @@
-# Option B: Test Real Email (Resend)
+# Email Notifications (Resend)
 
-Use this when you want the quote form to actually send notification emails instead of skipping email in dev.
+When a quote is submitted, the API sends you an email notification via [Resend](https://resend.com).
+
+Email is **automatic** -- if the three env vars below are set, every successful quote submission triggers an email. If any are missing, email is silently skipped (logged as `[QUOTE][EMAIL] Email config missing` in the terminal).
 
 ## 1. Get a Resend API key
 
@@ -9,21 +11,18 @@ Use this when you want the quote form to actually send notification emails inste
 
 ## 2. Configure `.dev.vars`
 
-Edit `.dev.vars` in the project root so it looks like this (use your own values):
+Copy `.dev.vars.example` to `.dev.vars` and fill in your values:
 
 ```bash
-# Remove or comment out so email is sent:
-# DEV_SKIP_EMAIL=1
-
-# Required for sending quote emails
+# Email notification (Resend) -- required for email to work
 EMAIL_FROM=onboarding@resend.dev
-EMAIL_TO=your-email@example.com
+EMAIL_TO=your-real-email@example.com
 RESEND_API_KEY=re_xxxxxxxxxxxx
 ```
 
-- **EMAIL_FROM** – Sender address. For testing you can use `onboarding@resend.dev` (Resend’s test domain). For production you’ll use your own verified domain.
-- **EMAIL_TO** – Where quote notifications should go (your email).
-- **RESEND_API_KEY** – The API key from Resend (e.g. `re_...`).
+- **EMAIL_FROM** -- Sender address. Use `onboarding@resend.dev` for testing (Resend's sandbox). For production, use your own verified domain.
+- **EMAIL_TO** -- Where quote notifications go (your email).
+- **RESEND_API_KEY** -- Your Resend API key (starts with `re_`).
 
 ## 3. Restart the dev server
 
@@ -36,14 +35,17 @@ npx wrangler pages dev .
 
 ## 4. Test
 
-Submit the quote form. You should get a 200 success and see the email in the inbox for **EMAIL_TO**. Check the terminal for `[QUOTE][EMAIL] Resend API success`.
+Submit the quote form. You should:
+- Get a 200 success response in the browser.
+- See `[QUOTE][EMAIL] Email sent successfully via Resend` in the terminal.
+- Receive the notification in the inbox for **EMAIL_TO**.
 
-## 5. Back to “no email” (Option A)
+## 5. What if I don't want email locally?
 
-To go back to form-only testing without sending email, set in `.dev.vars`:
+Just leave `RESEND_API_KEY` empty or remove the email vars from `.dev.vars`. The API will still work -- it saves to the database and returns `{ success: true }`. Email is only attempted when all three vars are present. You'll see `[QUOTE][EMAIL] Email config missing` in the logs, which is harmless.
 
-```bash
-DEV_SKIP_EMAIL=1
-```
+## Production
 
-and remove or comment out `EMAIL_FROM`, `EMAIL_TO`, and `RESEND_API_KEY` if you like. Restart `wrangler pages dev .` after changes.
+In the Cloudflare dashboard, set the same three env vars (`EMAIL_FROM`, `EMAIL_TO`, `RESEND_API_KEY`) under your Pages project:
+
+**Workers & Pages** > your project > **Settings** > **Environment variables** > Production

@@ -1,6 +1,6 @@
-# Cloudflare D1 Database Setup Instructions
+# Cloudflare D1 Database Setup
 
-This guide explains how to set up Cloudflare D1 (SQLite) database for storing quote form submissions.
+This guide explains how to set up the Cloudflare D1 (SQLite) database for storing quote form submissions.
 
 ## Prerequisites
 
@@ -10,41 +10,52 @@ This guide explains how to set up Cloudflare D1 (SQLite) database for storing qu
 
 ## Step 1: Create D1 Database
 
-1. **Via Cloudflare Dashboard:**
-   - Go to [Cloudflare Dashboard](https://dash.cloudflare.com/)
-   - Navigate to **Workers & Pages** → **D1**
-   - Click **Create database**
-   - Name it: `quote-submissions` (or your preferred name)
-   - Choose a region (e.g., `apac` for Asia-Pacific)
-   - Click **Create**
+The database `quotes-db` is already configured in `wrangler.toml`. If you need to create it from scratch:
 
-2. **Via Wrangler CLI:**
-   ```bash
-   wrangler d1 create quote-submissions
-   ```
-   
-   This will output a database ID. Save this for the next step.
+**Via Wrangler CLI:**
 
-## Step 2: Configure Database Binding
+```bash
+wrangler d1 create quotes-db
+```
 
-### For Cloudflare Pages:
+This outputs a database ID. Update `wrangler.toml` with the new ID if needed:
 
-1. Go to your Pages project in Cloudflare Dashboard
-2. Navigate to **Settings** → **Functions**
-3. Under **D1 database bindings**, click **Add binding**
-4. Set:
-   - **Variable name**: `DB` (must match the binding name used in code)
-   - **D1 database**: Select `quote-submissions`
-5. Click **Save**
-
-### For Cloudflare Workers (wrangler.toml):
-
-Add to your `wrangler.toml`:
 ```toml
 [[d1_databases]]
 binding = "DB"
-database_name = "quote-submissions"
+database_name = "quotes-db"
 database_id = "your-database-id-here"
+```
+
+**Via Cloudflare Dashboard:**
+
+1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. Navigate to **Workers & Pages** > **D1**
+3. Click **Create database**
+4. Name it: `quotes-db`
+5. Click **Create**
+
+## Step 2: Configure Database Binding
+
+### For Cloudflare Pages (Dashboard):
+
+1. Go to your Pages project in Cloudflare Dashboard
+2. Navigate to **Settings** > **Functions**
+3. Under **D1 database bindings**, click **Add binding**
+4. Set:
+   - **Variable name**: `DB` (must match the binding name used in code)
+   - **D1 database**: Select `quotes-db`
+5. Click **Save**
+
+### Via wrangler.toml (already done):
+
+Your `wrangler.toml` already has the binding:
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "quotes-db"
+database_id = "8f864549-d98a-4659-ab21-605a815e7363"
 ```
 
 ## Step 3: Run Database Migration
@@ -52,12 +63,11 @@ database_id = "your-database-id-here"
 Run the schema migration to create the `quotes` table:
 
 ```bash
-wrangler d1 execute quote-submissions --file=./schema.sql
-```
+# Production
+wrangler d1 execute quotes-db --file=./schema.sql
 
-Or if using a database ID:
-```bash
-wrangler d1 execute <database-id> --file=./schema.sql
+# Local dev
+wrangler d1 execute quotes-db --local --file=./schema.sql
 ```
 
 ## Step 4: Verify Database Setup
@@ -65,58 +75,74 @@ wrangler d1 execute <database-id> --file=./schema.sql
 Query the database to verify the table was created:
 
 ```bash
-wrangler d1 execute quote-submissions --command="SELECT name FROM sqlite_master WHERE type='table';"
+wrangler d1 execute quotes-db --command="SELECT name FROM sqlite_master WHERE type='table';"
 ```
 
 You should see `quotes` in the results.
 
-## Step 5: Test Locally (Optional)
-
-To test with a local D1 database:
+## Step 5: Test Locally
 
 ```bash
-# Create local database
-wrangler d1 execute quote-submissions --local --file=./schema.sql
+# Create local database and run migration
+wrangler d1 execute quotes-db --local --file=./schema.sql
 
-# Run local dev server
-wrangler pages dev --d1=DB=quote-submissions
+# Start the local dev server
+npx wrangler pages dev .
 ```
-
-## Environment Variables
-
-No additional environment variables are needed for D1. The database binding is configured through Cloudflare's binding system (not env vars).
 
 ## Database Schema
 
-The `quotes` table stores:
-- `id`: Auto-incrementing primary key
-- `name`, `email`, `phone`, `company`: Contact information
-- `pickup`, `delivery`: Location details
-- `freight_type`: JSON array of selected freight types (stored as TEXT)
-- `ip_address`: Client IP address (from Cloudflare headers)
-- `submitted_at`: ISO 8601 timestamp
-- `created_at`: Unix timestamp for efficient sorting
+The `quotes` table (defined in `schema.sql`) stores:
 
-## Querying Submissions
+| Column         | Type    | Description |
+|----------------|---------|-------------|
+| `id`           | INTEGER | Auto-incrementing primary key |
+| `name`         | TEXT    | Contact name (required) |
+| `phone`        | TEXT    | Phone number (required) |
+| `email`        | TEXT    | Email address (required) |
+| `company`      | TEXT    | Company name (optional, nullable) |
+| `pickup`       | TEXT    | Pickup location (required) |
+| `delivery`     | TEXT    | Delivery location (required) |
+| `freight_type` | TEXT    | Comma-separated freight types, e.g. `"Chilled, Frozen"` (required) |
+| `created_at`   | TEXT    | ISO 8601 timestamp, e.g. `"2026-02-12T10:30:00.000Z"` (required) |
 
-View recent submissions:
+## Viewing Submissions
 
-```bash
-wrangler d1 execute quote-submissions --command="SELECT * FROM quotes ORDER BY created_at DESC LIMIT 10;"
+### Via Cloudflare D1 Console (recommended)
+
+The easiest way to view submitted quotes without using the terminal:
+
+1. Go to the [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. Navigate to **Workers & Pages** > **D1**
+3. Click on **quotes-db**
+4. Click the **Console** tab
+5. Run:
+
+```sql
+SELECT * FROM quotes ORDER BY created_at DESC;
 ```
 
-Or via Cloudflare Dashboard:
-- Go to **Workers & Pages** → **D1** → **quote-submissions**
-- Click **Console** tab
-- Run SQL queries directly
+You'll see all submissions in a table view directly in the browser.
+
+### Via Wrangler CLI
+
+```bash
+# View the 10 most recent submissions
+wrangler d1 execute quotes-db --command="SELECT * FROM quotes ORDER BY created_at DESC LIMIT 10;"
+
+# Count total submissions
+wrangler d1 execute quotes-db --command="SELECT COUNT(*) FROM quotes;"
+```
 
 ## Troubleshooting
 
-**Error: "Database binding not found"**
+**Error: "Database is not available"**
 - Ensure the binding name in your Cloudflare config matches `DB` (the variable name used in `functions/api/quote.js`)
+- For local dev, ensure `wrangler.toml` has the `[[d1_databases]]` section
 
-**Error: "Table does not exist"**
-- Run the migration: `wrangler d1 execute quote-submissions --file=./schema.sql`
+**Error: "Table does not exist" / "Database insert failed"**
+- Run the migration: `wrangler d1 execute quotes-db --file=./schema.sql`
+- For local dev: `wrangler d1 execute quotes-db --local --file=./schema.sql`
 
 **Error: "Permission denied"**
 - Ensure you're authenticated: `wrangler login`
@@ -124,7 +150,7 @@ Or via Cloudflare Dashboard:
 
 ## Production Deployment
 
-After deploying your Pages/Worker:
-1. Ensure the D1 binding is configured in production environment
-2. Run migrations on production database (if needed)
-3. Test form submission to verify data is being stored
+After deploying your Pages project:
+1. Ensure the D1 binding (`DB` > `quotes-db`) is configured in the Pages project settings
+2. Run the migration on the production database: `wrangler d1 execute quotes-db --file=./schema.sql`
+3. Test by submitting a quote and checking the D1 Console for the new row
